@@ -61,36 +61,27 @@ class pandleau( object ):
         if dataframe.__class__.__name__ != 'DataFrame':
             raise Exception('Error: object is not a pandas DataFrame.')
         
-        self._dataframe = dataframe
-        self._column_names = list(self._dataframe.columns)
+        self._column_names = list(dataframe.columns)
         
         # Iniital column types
-        self._column_static_type = self._dataframe.apply(lambda x: pandleau.data_static_type(x), axis = 0)
+        self._column_static_type = dataframe.apply(lambda x: pandleau.data_static_type(x), axis = 0)
+
+        self._array = numpy.ascontiguousarray(dataframe.values)
 
 
-    def set_spatial(self, column_index, indicator = True):
+    def set_spatial(self, column_index):
         '''
         Allows the user to define a spatial column
         @param column_name = index of spatial column,
                              either number or name
-        @param indicator = change spatial characteristic  
-        
         '''
         
-        if indicator:
-            if column_index.__class__.__name__ == 'int':
-                self._column_static_type[column_index] = Type.SPATIAL
-            elif column_index.__class__.__name__ == 'str':
-                self._column_static_type[self._column_names.index(column_index)] = Type.SPATIAL
-            else:
-                raise Exception ('Error: could not find column in dataframe.')
+        if column_index.__class__.__name__ == 'int':
+            self._column_static_type[column_index] = Type.SPATIAL
+        elif column_index.__class__.__name__ == 'str':
+            self._column_static_type[self._column_names.index(column_index)] = Type.SPATIAL
         else:
-            if column_index.__class__.__name__ == 'int':
-                self._column_static_type[column_index] = pandleau.data_static_type(self._dataframe.iloc[:, column_index])
-            elif column_index.__class__.__name__ == 'str':
-                self._column_static_type[self._column_names.index(column_index)] = pandleau.data_static_type(self._dataframe.loc[:, column_index])
-            else:
-                raise Exception ('Error: could not find column in dataframe.')
+            raise Exception ('Error: could not find column in dataframe.')
 
 
     def to_tableau( self, path, add_index=False ):
@@ -116,8 +107,8 @@ class pandleau( object ):
         if add_index:
             table_def.addColumn( 'index', Type.INTEGER )
             
-        for col_index, col_name in enumerate(self._dataframe, 1):
-            table_def.addColumn( col_name, self._column_static_type[col_index-1] )
+        for col_index, col_name in enumerate(self._column_names):
+            table_def.addColumn( col_name, self._column_static_type[col_index] )
         
         # Create table
         new_table = new_extract.addTable( "Extract", table_def )
@@ -137,17 +128,16 @@ class pandleau( object ):
         '''
         # Create new row
         new_row = Row( extract_table )
-        
-        for row_index in self._dataframe.itertuples():
-
-            for col_index, col_entry in enumerate(row_index, 1):
+        index = 1
+        for row in self._array:
+            if add_index:
+                new_row.setInteger(0, index)
+                index += 1
+            for col_index, col_entry in enumerate(row):
+                column_type = self._column_static_type[col_index]
                 if add_index:
-                    if col_index == 1:
-                        new_row.setInteger(col_index, int( row_index ) )
-                if col_index != 1:
-                    column_type = self._column_static_type[col_index-2]
-#                    print(new_row, (col_index-2), col_entry, column_type)
-                    pandleau.determine_entry_value(new_row, (col_index-2), col_entry, column_type)
+                	col_index += 1
+                pandleau.determine_entry_value(new_row, col_index, col_entry, column_type)
                 
             tableau_table.insert( new_row )
             
@@ -171,7 +161,7 @@ class pandleau( object ):
                                   entry.encode('utf-8') )
             elif column_type == Type.UNICODE_STRING:
                 new_row.setString(entry_index, 
-                                  str(entry) )
+                                  entry)
             elif column_type == Type.BOOLEAN:
                 new_row.setBoolean(entry_index, 
                                    entry)
@@ -180,10 +170,10 @@ class pandleau( object ):
                                   entry)
             elif column_type == Type.INTEGER:
                 new_row.setInteger(entry_index, 
-                                   int( entry ) )
+                                   entry)
             elif column_type == Type.CHAR_STRING:
                 new_row.setCharString(entry_index, 
-                                      str( entry ) )
+                                      entry )
             elif column_type == Type.DATETIME:
                 new_row.setDateTime(entry_index,
                                     entry.year,
